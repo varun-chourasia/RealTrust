@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require("path");
 require('dotenv').config();
 
 const app = express();
@@ -8,30 +9,29 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Increased limit for Base64 images
+app.use(express.json({ limit: '50mb' }));
 
 // MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://varun:varun1207@cluster0.yf4q9un.mongodb.net/realtrust?appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://varun:varun1207@cluster0.yf4q9un.mongodb.net/realtrust?retryWrites=true&w=majority';
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB connected successfully'))
   .catch(err => {
     console.error('MongoDB connection error:', err);
-    console.log('HINT: Did you replace <db_username> and <db_password> in server.js with your actual credentials?');
   });
 
 // Schemas
 const ProjectSchema = new mongoose.Schema({
   name: String,
   description: String,
-  imageUrl: String, // Base64 string
+  imageUrl: String,
 });
 
 const ClientSchema = new mongoose.Schema({
   name: String,
   designation: String,
   description: String,
-  imageUrl: String, // Base64 string
+  imageUrl: String,
 });
 
 const ContactSchema = new mongoose.Schema({
@@ -53,20 +53,18 @@ const Client = mongoose.model('Client', ClientSchema);
 const Contact = mongoose.model('Contact', ContactSchema);
 const Subscriber = mongoose.model('Subscriber', SubscriberSchema);
 
-// --- Routes ---
+// ------------------ API ROUTES ------------------
 
 // Projects
 app.get('/api/projects', async (req, res) => {
   try {
     const projects = await Project.find();
-    // Map _id to id for frontend compatibility
-    const formatted = projects.map(p => ({
+    res.json(projects.map(p => ({
       id: p._id,
       name: p.name,
       description: p.description,
       imageUrl: p.imageUrl
-    }));
-    res.json(formatted);
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -74,8 +72,7 @@ app.get('/api/projects', async (req, res) => {
 
 app.post('/api/projects', async (req, res) => {
   try {
-    const newProject = new Project(req.body);
-    const saved = await newProject.save();
+    const saved = await new Project(req.body).save();
     res.json({
       id: saved._id,
       name: saved.name,
@@ -100,14 +97,13 @@ app.delete('/api/projects/:id', async (req, res) => {
 app.get('/api/clients', async (req, res) => {
   try {
     const clients = await Client.find();
-    const formatted = clients.map(c => ({
+    res.json(clients.map(c => ({
       id: c._id,
       name: c.name,
       designation: c.designation,
       description: c.description,
       imageUrl: c.imageUrl
-    }));
-    res.json(formatted);
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -115,8 +111,7 @@ app.get('/api/clients', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const newClient = new Client(req.body);
-    const saved = await newClient.save();
+    const saved = await new Client(req.body).save();
     res.json({
       id: saved._id,
       name: saved.name,
@@ -138,19 +133,18 @@ app.delete('/api/clients/:id', async (req, res) => {
   }
 });
 
-// Contact Forms
+// Contacts
 app.get('/api/contacts', async (req, res) => {
   try {
     const contacts = await Contact.find().sort({ date: -1 });
-    const formatted = contacts.map(c => ({
+    res.json(contacts.map(c => ({
       id: c._id,
       fullName: c.fullName,
       email: c.email,
       mobile: c.mobile,
       city: c.city,
       date: c.date
-    }));
-    res.json(formatted);
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -158,8 +152,7 @@ app.get('/api/contacts', async (req, res) => {
 
 app.post('/api/contacts', async (req, res) => {
   try {
-    const newContact = new Contact(req.body);
-    await newContact.save();
+    await new Contact(req.body).save();
     res.json({ message: 'Contact saved' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -170,12 +163,11 @@ app.post('/api/contacts', async (req, res) => {
 app.get('/api/subscribers', async (req, res) => {
   try {
     const subs = await Subscriber.find().sort({ date: -1 });
-    const formatted = subs.map(s => ({
+    res.json(subs.map(s => ({
       id: s._id,
       email: s.email,
       date: s.date
-    }));
-    res.json(formatted);
+    })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -184,20 +176,26 @@ app.get('/api/subscribers', async (req, res) => {
 app.post('/api/subscribers', async (req, res) => {
   try {
     const { email } = req.body;
-    // Check for duplicate
-    const existing = await Subscriber.findOne({ email });
-    if (existing) {
-      return res.json({ message: 'Already subscribed' });
-    }
-    const newSub = new Subscriber({ email });
-    await newSub.save();
-    res.json({ message: 'Subscribed successfully' });
+    const exists = await Subscriber.findOne({ email });
+    if (exists) return res.json({ message: "Already subscribed" });
+
+    await new Subscriber({ email }).save();
+    res.json({ message: "Subscribed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Start Server
+// ------------------ FRONTEND SERVE ------------------
+
+const __dirname1 = path.resolve();
+app.use(express.static(path.join(__dirname1, "dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname1, "dist", "index.html"));
+});
+
+// ------------------ START ------------------
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
